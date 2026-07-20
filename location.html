@@ -106,9 +106,8 @@
       <label for="deviceLabel">Device Label</label>
       <input id="deviceLabel" value="esp32-aht20-001">
 
-      <button id="start">Start 10 Minute Tracking</button>
-      <button id="stop" class="secondary">Stop</button>
-      <button id="sendNow" class="secondary">Send Now</button>
+      <button id="start">Start Tracking</button>
+      <button id="stop" class="secondary">Stop Tracking</button>
       <p id="status" class="warn">Idle. Location permission has not been requested yet.</p>
     </section>
 
@@ -126,8 +125,8 @@
         <b id="accuracy">--</b>
       </div>
       <div class="metric">
-        <label>Remaining</label>
-        <b id="remaining">10:00</b>
+        <label>Last Upload</label>
+        <b id="lastUpload">--</b>
       </div>
     </section>
   </main>
@@ -139,14 +138,11 @@
     const latEl = document.getElementById('lat');
     const lonEl = document.getElementById('lon');
     const accuracyEl = document.getElementById('accuracy');
-    const remainingEl = document.getElementById('remaining');
+    const lastUploadEl = document.getElementById('lastUpload');
 
     const UPLOAD_INTERVAL_MS = 75000;
-    const SESSION_LENGTH_MS = 10 * 60 * 1000;
     let watchId = null;
     let uploadTimer = null;
-    let countdownTimer = null;
-    let stopAtMs = 0;
     let latestPosition = null;
 
     function setStatus(text, className) {
@@ -169,14 +165,6 @@
       latEl.textContent = coords.latitude.toFixed(6);
       lonEl.textContent = coords.longitude.toFixed(6);
       accuracyEl.textContent = Math.round(coords.accuracy) + ' m';
-    }
-
-    function updateCountdown() {
-      const remaining = Math.max(0, stopAtMs - Date.now());
-      const minutes = Math.floor(remaining / 60000);
-      const seconds = Math.floor((remaining % 60000) / 1000);
-      remainingEl.textContent = String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
-      if (remaining === 0) stopTracking();
     }
 
     async function sendLocation() {
@@ -204,7 +192,8 @@
       const url = 'https://api.thingspeak.com/update?' + params.toString();
       try {
         await fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store' });
-        setStatus('Location upload sent at ' + new Date().toLocaleTimeString() + '.', 'ok');
+        lastUploadEl.textContent = new Date().toLocaleTimeString();
+        setStatus('Location upload sent. Tracking continues until you stop it.', 'ok');
       } catch (error) {
         setStatus('Could not send location. Check internet and try again.', 'bad');
       }
@@ -218,8 +207,6 @@
       }
 
       stopTracking(false);
-      stopAtMs = Date.now() + SESSION_LENGTH_MS;
-      updateCountdown();
 
       watchId = navigator.geolocation.watchPosition(
         position => {
@@ -238,23 +225,19 @@
       );
 
       uploadTimer = setInterval(sendLocation, UPLOAD_INTERVAL_MS);
-      countdownTimer = setInterval(updateCountdown, 1000);
       setTimeout(sendLocation, 20000);
     }
 
     function stopTracking(showMessage = true) {
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
       if (uploadTimer !== null) clearInterval(uploadTimer);
-      if (countdownTimer !== null) clearInterval(countdownTimer);
       watchId = null;
       uploadTimer = null;
-      countdownTimer = null;
       if (showMessage) setStatus('Stopped.', 'warn');
     }
 
     document.getElementById('start').addEventListener('click', startTracking);
     document.getElementById('stop').addEventListener('click', () => stopTracking(true));
-    document.getElementById('sendNow').addEventListener('click', sendLocation);
     loadSettings();
   </script>
 </body>
