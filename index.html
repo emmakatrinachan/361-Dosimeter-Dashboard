@@ -56,7 +56,7 @@
     }
     .filters {
       display: grid;
-      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      grid-template-columns: repeat(3, minmax(150px, 1fr));
       margin-bottom: 12px;
     }
     .control, .panel {
@@ -270,16 +270,8 @@
 
     <section class="filters">
       <div class="control">
-        <label for="channelId">ThingSpeak Channel ID</label>
-        <input id="channelId" placeholder="1234567">
-      </div>
-      <div class="control">
-        <label for="readKey">Read API Key</label>
-        <input id="readKey" placeholder="Optional if public">
-      </div>
-      <div class="control">
         <label for="windowMinutes">Time window</label>
-        <select id="windowMinutes">
+          <select id="windowMinutes">
           <option value="10">Last 10 minutes</option>
           <option value="60">Last hour</option>
           <option value="360">Last 6 hours</option>
@@ -380,8 +372,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    const channelIdEl = document.getElementById('channelId');
-    const readKeyEl = document.getElementById('readKey');
+    const THINGSPEAK_CHANNEL_ID = '3431237';
     const windowMinutesEl = document.getElementById('windowMinutes');
     const showMetricEl = document.getElementById('showMetric');
     const statusEl = document.getElementById('status');
@@ -396,15 +387,11 @@
     let matched = [];
 
     function saveSettings() {
-      localStorage.setItem('routeChannelId', channelIdEl.value.trim());
-      localStorage.setItem('routeReadKey', readKeyEl.value.trim());
       localStorage.setItem('routeWindow', windowMinutesEl.value);
       localStorage.setItem('routeMetric', showMetricEl.value);
     }
 
     function loadSettings() {
-      channelIdEl.value = localStorage.getItem('routeChannelId') || '';
-      readKeyEl.value = localStorage.getItem('routeReadKey') || '';
       windowMinutesEl.value = localStorage.getItem('routeWindow') || '1440';
       showMetricEl.value = localStorage.getItem('routeMetric') || 'comfort';
     }
@@ -448,17 +435,11 @@
         status: 'true',
         results: '8000'
       });
-      if (readKeyEl.value.trim()) params.set('api_key', readKeyEl.value.trim());
-      return 'https://api.thingspeak.com/channels/' + encodeURIComponent(channelIdEl.value.trim()) + '/feeds.json?' + params.toString();
+      return 'https://api.thingspeak.com/channels/' + THINGSPEAK_CHANNEL_ID + '/feeds.json?' + params.toString();
     }
 
     async function loadData() {
       saveSettings();
-      if (!channelIdEl.value.trim()) {
-        statusEl.textContent = 'Enter a channel ID';
-        statusEl.className = 'error';
-        return;
-      }
       statusEl.textContent = 'Loading...';
       statusEl.className = '';
 
@@ -740,9 +721,9 @@
     windowMinutesEl.addEventListener('change', loadData);
     showMetricEl.addEventListener('change', renderMap);
     loadSettings();
-    if (channelIdEl.value.trim()) loadData();
+    loadData();
     setInterval(() => {
-      if (channelIdEl.value.trim()) loadData();
+      loadData();
     }, 60000);
   </script>
 </body>
