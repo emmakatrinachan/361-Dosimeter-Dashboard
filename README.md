@@ -28,8 +28,7 @@ ThingSpeak latitude and longitude are sent separately as `lat` and `long`.
 https://YOUR_USERNAME.github.io/YOUR_REPO_NAME/
 ```
 
-4. Paste your ThingSpeak Channel ID.
-5. If the ThingSpeak channel is private, paste your Read API Key.
+4. The dashboard is already configured for public ThingSpeak channel `3431237`.
 
 ## Phone Location Upload
 
