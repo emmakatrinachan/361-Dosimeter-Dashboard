@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phone Location Uploader</title>
+  <style>
+    :root {
+      --ink: #142022;
+      --muted: #627073;
+      --line: #d7e0df;
+      --page: #f5f7f7;
+      --panel: #ffffff;
+      --accent: #0b7664;
+      --warn: #a15c00;
+      --bad: #b3261e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--page);
+      color: var(--ink);
+    }
+    main {
+      width: min(720px, calc(100vw - 28px));
+      margin: 0 auto;
+      padding: 20px 0;
+    }
+    header {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 14px;
+      margin-bottom: 14px;
+    }
+    h1 { margin: 0; font-size: 1.8rem; letter-spacing: 0; }
+    p { color: var(--muted); line-height: 1.45; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      font: inherit;
+      margin-bottom: 10px;
+    }
+    button {
+      border: 0;
+      border-radius: 6px;
+      background: var(--accent);
+      color: white;
+      padding: 10px 12px;
+      font: inherit;
+      cursor: pointer;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+    button.secondary {
+      background: #e6eceb;
+      color: var(--ink);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .metric {
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+    }
+    .metric b {
+      display: block;
+      font-size: 1.35rem;
+      overflow-wrap: anywhere;
+    }
+    .ok { color: var(--accent); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    @media (max-width: 620px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Phone Location Uploader</h1>
+      <p>Keep this page open while recording. It sends phone GPS coordinates to the same ThingSpeak channel as the ESP32 sensor readings.</p>
+    </header>
+
+    <section class="panel">
+      <label for="writeKey">ThingSpeak Write API Key</label>
+      <input id="writeKey" placeholder="Paste Write API Key">
+
+      <label for="deviceLabel">Device Label</label>
+      <input id="deviceLabel" value="esp32-aht20-001">
+
+      <button id="start">Start 10 Minute Tracking</button>
+      <button id="stop" class="secondary">Stop</button>
+      <button id="sendNow" class="secondary">Send Now</button>
+      <p id="status" class="warn">Idle. Location permission has not been requested yet.</p>
+    </section>
+
+    <section class="panel grid">
+      <div class="metric">
+        <label>Latitude</label>
+        <b id="lat">--</b>
+      </div>
+      <div class="metric">
+        <label>Longitude</label>
+        <b id="lon">--</b>
+      </div>
+      <div class="metric">
+        <label>Accuracy</label>
+        <b id="accuracy">--</b>
+      </div>
+      <div class="metric">
+        <label>Remaining</label>
+        <b id="remaining">10:00</b>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const writeKeyInput = document.getElementById('writeKey');
+    const deviceLabelInput = document.getElementById('deviceLabel');
+    const statusEl = document.getElementById('status');
+    const latEl = document.getElementById('lat');
+    const lonEl = document.getElementById('lon');
+    const accuracyEl = document.getElementById('accuracy');
+    const remainingEl = document.getElementById('remaining');
+
+    const UPLOAD_INTERVAL_MS = 75000;
+    const SESSION_LENGTH_MS = 10 * 60 * 1000;
+    let watchId = null;
+    let uploadTimer = null;
+    let countdownTimer = null;
+    let stopAtMs = 0;
+    let latestPosition = null;
+
+    function setStatus(text, className) {
+      statusEl.textContent = text;
+      statusEl.className = className || '';
+    }
+
+    function saveSettings() {
+      localStorage.setItem('thingspeakWriteKey', writeKeyInput.value.trim());
+      localStorage.setItem('deviceLabel', deviceLabelInput.value.trim());
+    }
+
+    function loadSettings() {
+      writeKeyInput.value = localStorage.getItem('thingspeakWriteKey') || '';
+      deviceLabelInput.value = localStorage.getItem('deviceLabel') || 'esp32-aht20-001';
+    }
+
+    function updatePositionUi(position) {
+      const coords = position.coords;
+      latEl.textContent = coords.latitude.toFixed(6);
+      lonEl.textContent = coords.longitude.toFixed(6);
+      accuracyEl.textContent = Math.round(coords.accuracy) + ' m';
+    }
+
+    function updateCountdown() {
+      const remaining = Math.max(0, stopAtMs - Date.now());
+      const minutes = Math.floor(remaining / 60000);
+      const seconds = Math.floor((remaining % 60000) / 1000);
+      remainingEl.textContent = String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+      if (remaining === 0) stopTracking();
+    }
+
+    async function sendLocation() {
+      saveSettings();
+      const writeKey = writeKeyInput.value.trim();
+      const deviceLabel = deviceLabelInput.value.trim() || 'esp32-aht20-001';
+      if (!writeKey) {
+        setStatus('Paste your ThingSpeak Write API Key first.', 'bad');
+        return;
+      }
+      if (!latestPosition) {
+        setStatus('Waiting for the first GPS fix.', 'warn');
+        return;
+      }
+
+      const coords = latestPosition.coords;
+      const params = new URLSearchParams({
+        api_key: writeKey,
+        field3: String(Math.round(coords.accuracy)),
+        lat: coords.latitude.toFixed(6),
+        long: coords.longitude.toFixed(6),
+        status: deviceLabel + ' phone-location'
+      });
+
+      const url = 'https://api.thingspeak.com/update?' + params.toString();
+      try {
+        await fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store' });
+        setStatus('Location upload sent at ' + new Date().toLocaleTimeString() + '.', 'ok');
+      } catch (error) {
+        setStatus('Could not send location. Check internet and try again.', 'bad');
+      }
+    }
+
+    function startTracking() {
+      saveSettings();
+      if (!navigator.geolocation) {
+        setStatus('This browser does not support geolocation.', 'bad');
+        return;
+      }
+
+      stopTracking(false);
+      stopAtMs = Date.now() + SESSION_LENGTH_MS;
+      updateCountdown();
+
+      watchId = navigator.geolocation.watchPosition(
+        position => {
+          latestPosition = position;
+          updatePositionUi(position);
+          setStatus('Tracking location. Keep this page open and the screen awake.', 'ok');
+        },
+        error => {
+          setStatus(error.message || 'Location permission failed.', 'bad');
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 5000,
+          timeout: 20000
+        }
+      );
+
+      uploadTimer = setInterval(sendLocation, UPLOAD_INTERVAL_MS);
+      countdownTimer = setInterval(updateCountdown, 1000);
+      setTimeout(sendLocation, 20000);
+    }
+
+    function stopTracking(showMessage = true) {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (uploadTimer !== null) clearInterval(uploadTimer);
+      if (countdownTimer !== null) clearInterval(countdownTimer);
+      watchId = null;
+      uploadTimer = null;
+      countdownTimer = null;
+      if (showMessage) setStatus('Stopped.', 'warn');
+    }
+
+    document.getElementById('start').addEventListener('click', startTracking);
+    document.getElementById('stop').addEventListener('click', () => stopTracking(true));
+    document.getElementById('sendNow').addEventListener('click', sendLocation);
+    loadSettings();
+  </script>
+</body>
+</html>

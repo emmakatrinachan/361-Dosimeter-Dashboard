@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mobile Route Exposure Analysis</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      --ink: #172126;
+      --muted: #68777e;
+      --line: #dce3e6;
+      --page: #f6f8f9;
+      --panel: #ffffff;
+      --teal: #118978;
+      --green: #53a96b;
+      --yellow: #f0b43c;
+      --orange: #ee7a28;
+      --red: #d62f22;
+      --blue: #2f7fbf;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    main {
+      width: min(1280px, calc(100vw - 28px));
+      margin: 0 auto;
+      padding: 18px 0 24px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.35rem, 2vw, 2rem);
+      letter-spacing: 0;
+    }
+    .sub {
+      color: var(--muted);
+      margin-top: 5px;
+      font-size: 0.9rem;
+    }
+    .actions, .filters {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .filters {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      margin-bottom: 12px;
+    }
+    .control, .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .control {
+      padding: 10px 12px;
+      min-height: 58px;
+    }
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      margin-bottom: 5px;
+    }
+    input, select, button {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 9px;
+      font: inherit;
+      background: #fff;
+      color: var(--ink);
+      min-width: 0;
+    }
+    button {
+      background: var(--ink);
+      color: white;
+      cursor: pointer;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 12px;
+    }
+    .map-panel {
+      grid-column: span 8;
+      padding: 0;
+      overflow: hidden;
+    }
+    .panel-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    h2 {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: 0;
+    }
+    #map {
+      height: 500px;
+      width: 100%;
+      background: #eef2f2;
+    }
+    .legend {
+      position: absolute;
+      z-index: 500;
+      left: 14px;
+      top: 74px;
+      width: 190px;
+      background: rgba(255,255,255,0.94);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 0.82rem;
+    }
+    .legend b { display: block; margin-bottom: 8px; }
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 7px 0;
+      color: var(--muted);
+    }
+    .swatch {
+      width: 28px;
+      height: 4px;
+      border-radius: 99px;
+      background: var(--teal);
+    }
+    .priority-panel {
+      grid-column: span 4;
+      padding: 0;
+      overflow: hidden;
+    }
+    .corridor-list {
+      padding: 10px 0;
+    }
+    .corridor {
+      display: grid;
+      grid-template-columns: 34px 1fr 64px;
+      gap: 10px;
+      align-items: center;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .rank {
+      display: grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      color: white;
+      background: var(--orange);
+      font-weight: 700;
+    }
+    .corridor b { display: block; font-size: 0.92rem; }
+    .corridor span { display: block; margin-top: 3px; color: var(--muted); font-size: 0.8rem; }
+    .score {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 8px;
+      text-align: center;
+      font-weight: 700;
+      color: var(--orange);
+    }
+    .kpi {
+      grid-column: span 3;
+      padding: 13px;
+      min-height: 106px;
+    }
+    .kpi b {
+      display: block;
+      font-size: clamp(1.5rem, 3vw, 2.25rem);
+      line-height: 1;
+      overflow-wrap: anywhere;
+    }
+    .kpi span {
+      display: block;
+      color: var(--muted);
+      margin-top: 8px;
+      font-size: 0.86rem;
+    }
+    .table-panel {
+      grid-column: span 5;
+      overflow: hidden;
+      padding: 0;
+    }
+    .chart-panel {
+      grid-column: span 7;
+      padding: 0;
+      overflow: hidden;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 700; font-size: 0.78rem; }
+    .bar {
+      width: 84px;
+      height: 8px;
+      background: #e7ecee;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .bar i {
+      display: block;
+      height: 100%;
+      background: var(--green);
+    }
+    canvas {
+      width: 100%;
+      height: 260px;
+      background: #fbfcfc;
+      display: block;
+    }
+    .note {
+      color: var(--muted);
+      padding: 11px 14px;
+      border-top: 1px solid var(--line);
+      font-size: 0.86rem;
+    }
+    .error { color: var(--red); font-weight: 700; }
+    @media (max-width: 980px) {
+      .filters { grid-template-columns: repeat(2, 1fr); }
+      .map-panel, .priority-panel, .kpi, .table-panel, .chart-panel { grid-column: 1 / -1; }
+      #map { height: 430px; }
+    }
+    @media (max-width: 620px) {
+      header { flex-direction: column; }
+      .filters { grid-template-columns: 1fr; }
+      .actions { width: 100%; }
+      .actions button { flex: 1; }
+      #map { height: 360px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Mobile Route Exposure Analysis</h1>
+        <div class="sub">Tracks where the mobile ESP32 reports warmer, wetter, or less comfortable conditions along a route.</div>
+      </div>
+      <div class="actions">
+        <button id="refresh">Refresh</button>
+        <button id="export">Export CSV</button>
+      </div>
+    </header>
+
+    <section class="filters">
+      <div class="control">
+        <label for="channelId">ThingSpeak Channel ID</label>
+        <input id="channelId" placeholder="1234567">
+      </div>
+      <div class="control">
+        <label for="readKey">Read API Key</label>
+        <input id="readKey" placeholder="Optional if public">
+      </div>
+      <div class="control">
+        <label for="windowMinutes">Time window</label>
+        <select id="windowMinutes">
+          <option value="10">Last 10 minutes</option>
+          <option value="60">Last hour</option>
+          <option value="360">Last 6 hours</option>
+          <option value="1440" selected>Last day</option>
+          <option value="10080">Last week</option>
+        </select>
+      </div>
+      <div class="control">
+        <label for="showMetric">Show on route</label>
+        <select id="showMetric">
+          <option value="comfort" selected>Comfort exposure</option>
+          <option value="temp">Temperature</option>
+          <option value="humidity">Humidity</option>
+        </select>
+      </div>
+      <div class="control">
+        <label>Status</label>
+        <div id="status">Enter channel details</div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <section class="panel map-panel">
+        <div class="panel-title">
+          <h2>Recorded Route Map</h2>
+          <span id="pointCount" class="sub">0 points</span>
+        </div>
+        <div style="position: relative">
+          <div class="legend">
+            <b>Exposure</b>
+            <div class="legend-row"><i class="swatch" style="background: var(--teal)"></i>Very comfortable</div>
+            <div class="legend-row"><i class="swatch" style="background: var(--green)"></i>Comfortable</div>
+            <div class="legend-row"><i class="swatch" style="background: var(--yellow)"></i>Moderate</div>
+            <div class="legend-row"><i class="swatch" style="background: var(--orange)"></i>Uncomfortable</div>
+            <div class="legend-row"><i class="swatch" style="background: var(--red)"></i>Very uncomfortable</div>
+          </div>
+          <div id="map"></div>
+        </div>
+      </section>
+
+      <aside class="panel priority-panel">
+        <div class="panel-title">
+          <h2>Priority Route Segments</h2>
+          <span class="sub">Ranked by exposure</span>
+        </div>
+        <div id="priorityList" class="corridor-list"></div>
+      </aside>
+
+      <article class="panel kpi">
+        <label>Route Samples</label>
+        <b id="samples">0</b>
+        <span>GPS points with matched sensor data</span>
+      </article>
+      <article class="panel kpi">
+        <label>Peak Temperature</label>
+        <b id="peakTemp">-- C</b>
+        <span id="peakTempNote">Across route</span>
+      </article>
+      <article class="panel kpi">
+        <label>Peak Humidity</label>
+        <b id="peakHumidity">--%</b>
+        <span>Relative humidity</span>
+      </article>
+      <article class="panel kpi">
+        <label>Exposure Score</label>
+        <b id="exposureScore">--</b>
+        <span>0 comfortable, 100 highest exposure</span>
+      </article>
+
+      <section class="panel table-panel">
+        <div class="panel-title">
+          <h2>Route Summaries</h2>
+          <span class="sub">Auto-grouped segments</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Segment</th>
+              <th>Comfort</th>
+              <th>Avg Data</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="summaryRows"></tbody>
+        </table>
+      </section>
+
+      <section class="panel chart-panel">
+        <div class="panel-title">
+          <h2>Historical Comparison</h2>
+          <span class="sub">Temperature and humidity over time</span>
+        </div>
+        <canvas id="timeline" width="760" height="260"></canvas>
+        <div class="note" id="takeaway">Load data to generate a route takeaway.</div>
+      </section>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const channelIdEl = document.getElementById('channelId');
+    const readKeyEl = document.getElementById('readKey');
+    const windowMinutesEl = document.getElementById('windowMinutes');
+    const showMetricEl = document.getElementById('showMetric');
+    const statusEl = document.getElementById('status');
+    const map = L.map('map', { zoomControl: true }).setView([43.6532, -79.3832], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+    const routeLayer = L.layerGroup().addTo(map);
+    const ctx = document.getElementById('timeline').getContext('2d');
+
+    let matched = [];
+
+    function saveSettings() {
+      localStorage.setItem('routeChannelId', channelIdEl.value.trim());
+      localStorage.setItem('routeReadKey', readKeyEl.value.trim());
+      localStorage.setItem('routeWindow', windowMinutesEl.value);
+      localStorage.setItem('routeMetric', showMetricEl.value);
+    }
+
+    function loadSettings() {
+      channelIdEl.value = localStorage.getItem('routeChannelId') || '';
+      readKeyEl.value = localStorage.getItem('routeReadKey') || '';
+      windowMinutesEl.value = localStorage.getItem('routeWindow') || '1440';
+      showMetricEl.value = localStorage.getItem('routeMetric') || 'comfort';
+    }
+
+    function fmt(value, digits = 1) {
+      return Number.isFinite(value) ? value.toFixed(digits) : '--';
+    }
+
+    function comfortScore(tempC, humidity) {
+      if (!Number.isFinite(tempC) || !Number.isFinite(humidity)) return 50;
+      const heat = Math.max(0, tempC - 22) * 7;
+      const cold = Math.max(0, 18 - tempC) * 5;
+      const humid = Math.max(0, humidity - 55) * 1.4;
+      const dry = Math.max(0, 35 - humidity) * 0.8;
+      return Math.max(0, Math.min(100, Math.round(heat + cold + humid + dry)));
+    }
+
+    function colorFor(point) {
+      let score = point.score;
+      if (showMetricEl.value === 'temp') score = Math.max(0, Math.min(100, (point.tempC - 15) * 6));
+      if (showMetricEl.value === 'humidity') score = Math.max(0, Math.min(100, point.humidity));
+      if (score < 20) return '#118978';
+      if (score < 40) return '#53a96b';
+      if (score < 60) return '#f0b43c';
+      if (score < 80) return '#ee7a28';
+      return '#d62f22';
+    }
+
+    function reasonFor(point) {
+      if (point.tempC > 28 && point.humidity > 65) return 'High heat and humidity';
+      if (point.tempC > 28) return 'High temperature';
+      if (point.humidity > 70) return 'High humidity';
+      if (point.tempC < 18) return 'Cool conditions';
+      return 'Comfortable range';
+    }
+
+    function apiUrl() {
+      const params = new URLSearchParams({
+        minutes: windowMinutesEl.value,
+        location: 'true',
+        status: 'true',
+        results: '8000'
+      });
+      if (readKeyEl.value.trim()) params.set('api_key', readKeyEl.value.trim());
+      return 'https://api.thingspeak.com/channels/' + encodeURIComponent(channelIdEl.value.trim()) + '/feeds.json?' + params.toString();
+    }
+
+    async function loadData() {
+      saveSettings();
+      if (!channelIdEl.value.trim()) {
+        statusEl.textContent = 'Enter a channel ID';
+        statusEl.className = 'error';
+        return;
+      }
+      statusEl.textContent = 'Loading...';
+      statusEl.className = '';
+
+      try {
+        const response = await fetch(apiUrl(), { cache: 'no-store' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const data = await response.json();
+        const feeds = data.feeds || [];
+        matched = matchRoutePoints(feeds);
+        renderAll();
+        statusEl.textContent = 'Loaded ' + feeds.length + ' ThingSpeak rows';
+      } catch (error) {
+        statusEl.textContent = 'Could not load channel';
+        statusEl.className = 'error';
+      }
+    }
+
+    function matchRoutePoints(feeds) {
+      const sensorRows = feeds
+        .filter(row => row.field1 !== null || row.field2 !== null)
+        .map(row => ({
+          time: new Date(row.created_at).getTime(),
+          tempC: Number(row.field1),
+          humidity: Number(row.field2)
+        }))
+        .filter(row => Number.isFinite(row.time));
+
+      return feeds
+        .filter(row => row.latitude !== null && row.longitude !== null)
+        .map(row => {
+          const time = new Date(row.created_at).getTime();
+          const lat = Number(row.latitude);
+          const lon = Number(row.longitude);
+          let nearest = null;
+          let nearestDelta = Infinity;
+          sensorRows.forEach(sensor => {
+            const delta = Math.abs(sensor.time - time);
+            if (delta < nearestDelta) {
+              nearest = sensor;
+              nearestDelta = delta;
+            }
+          });
+          if (!nearest || nearestDelta > 3 * 60 * 1000) return null;
+          return {
+            time,
+            lat,
+            lon,
+            accuracy: Number(row.field3),
+            tempC: nearest.tempC,
+            humidity: nearest.humidity,
+            score: comfortScore(nearest.tempC, nearest.humidity),
+            sensorDeltaSeconds: Math.round(nearestDelta / 1000)
+          };
+        })
+        .filter(point => point && Number.isFinite(point.lat) && Number.isFinite(point.lon));
+    }
+
+    function renderAll() {
+      renderMap();
+      renderKpis();
+      renderPriorityList();
+      renderTable();
+      renderTimeline();
+    }
+
+    function renderMap() {
+      routeLayer.clearLayers();
+      document.getElementById('pointCount').textContent = matched.length + ' matched points';
+      if (matched.length === 0) return;
+
+      const bounds = [];
+      for (let i = 1; i < matched.length; i++) {
+        const a = matched[i - 1];
+        const b = matched[i];
+        bounds.push([a.lat, a.lon], [b.lat, b.lon]);
+        L.polyline([[a.lat, a.lon], [b.lat, b.lon]], {
+          color: colorFor(b),
+          weight: 7,
+          opacity: 0.88
+        }).addTo(routeLayer);
+      }
+
+      matched.forEach((point, index) => {
+        if (index === 0 || index === matched.length - 1 || point.score >= 70) {
+          L.circleMarker([point.lat, point.lon], {
+            radius: point.score >= 70 ? 7 : 5,
+            color: '#ffffff',
+            weight: 2,
+            fillColor: colorFor(point),
+            fillOpacity: 1
+          })
+            .bindPopup(
+              '<b>' + new Date(point.time).toLocaleTimeString() + '</b><br>' +
+              fmt(point.tempC) + ' C<br>' +
+              fmt(point.humidity) + '% RH<br>' +
+              'Score ' + point.score
+            )
+            .addTo(routeLayer);
+        }
+      });
+
+      if (bounds.length) map.fitBounds(bounds, { padding: [30, 30] });
+    }
+
+    function renderKpis() {
+      const samples = matched.length;
+      document.getElementById('samples').textContent = samples;
+      if (!samples) {
+        document.getElementById('peakTemp').textContent = '-- C';
+        document.getElementById('peakHumidity').textContent = '--%';
+        document.getElementById('exposureScore').textContent = '--';
+        document.getElementById('takeaway').textContent = 'Load data after the ESP and phone uploader have sent rows.';
+        return;
+      }
+
+      const peakTemp = Math.max(...matched.map(point => point.tempC).filter(Number.isFinite));
+      const peakHumidity = Math.max(...matched.map(point => point.humidity).filter(Number.isFinite));
+      const avgScore = Math.round(matched.reduce((sum, point) => sum + point.score, 0) / samples);
+      const worst = matched.reduce((max, point) => point.score > max.score ? point : max, matched[0]);
+
+      document.getElementById('peakTemp').textContent = fmt(peakTemp) + ' C';
+      document.getElementById('peakHumidity').textContent = fmt(peakHumidity) + '%';
+      document.getElementById('exposureScore').textContent = avgScore;
+      document.getElementById('peakTempNote').textContent = 'Worst point at ' + new Date(worst.time).toLocaleTimeString();
+      document.getElementById('takeaway').textContent = 'Highest exposure was ' + reasonFor(worst).toLowerCase() + ' around ' + new Date(worst.time).toLocaleTimeString() + '.';
+    }
+
+    function segments() {
+      if (!matched.length) return [];
+      const count = Math.min(4, matched.length);
+      const size = Math.ceil(matched.length / count);
+      const names = ['Route segment A', 'Route segment B', 'Route segment C', 'Route segment D'];
+      const groups = [];
+      for (let i = 0; i < matched.length; i += size) {
+        const slice = matched.slice(i, i + size);
+        const avgScore = Math.round(slice.reduce((sum, point) => sum + point.score, 0) / slice.length);
+        const avgTemp = slice.reduce((sum, point) => sum + point.tempC, 0) / slice.length;
+        const avgHumidity = slice.reduce((sum, point) => sum + point.humidity, 0) / slice.length;
+        const worst = slice.reduce((max, point) => point.score > max.score ? point : max, slice[0]);
+        groups.push({
+          name: names[groups.length] || 'Route segment',
+          score: avgScore,
+          tempC: avgTemp,
+          humidity: avgHumidity,
+          reason: reasonFor(worst),
+          start: slice[0].time,
+          end: slice[slice.length - 1].time
+        });
+      }
+      return groups;
+    }
+
+    function renderPriorityList() {
+      const list = document.getElementById('priorityList');
+      const ranked = segments().sort((a, b) => b.score - a.score);
+      if (!ranked.length) {
+        list.innerHTML = '<div class="corridor"><span></span><div><b>No route yet</b><span>Start the phone uploader and ESP uploads.</span></div><div class="score">--</div></div>';
+        return;
+      }
+      list.innerHTML = ranked.map((segment, index) => `
+        <div class="corridor">
+          <div class="rank" style="background:${segment.score >= 70 ? 'var(--red)' : segment.score >= 50 ? 'var(--orange)' : 'var(--green)'}">${index + 1}</div>
+          <div>
+            <b>${segment.name}</b>
+            <span>${segment.reason}</span>
+          </div>
+          <div class="score">${segment.score}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderTable() {
+      const rows = document.getElementById('summaryRows');
+      const groups = segments();
+      if (!groups.length) {
+        rows.innerHTML = '<tr><td colspan="4">No matched route data yet.</td></tr>';
+        return;
+      }
+      rows.innerHTML = groups.map(segment => `
+        <tr>
+          <td><b>${segment.name}</b><br><span class="sub">${new Date(segment.start).toLocaleTimeString()} - ${new Date(segment.end).toLocaleTimeString()}</span></td>
+          <td><div class="bar"><i style="width:${segment.score}%;background:${segment.score >= 70 ? 'var(--red)' : segment.score >= 50 ? 'var(--orange)' : 'var(--green)'}"></i></div><span class="sub">${segment.score}/100</span></td>
+          <td>${fmt(segment.tempC)} C<br>${fmt(segment.humidity)}% RH</td>
+          <td>${segment.reason}</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderTimeline() {
+      const canvas = document.getElementById('timeline');
+      const width = canvas.width;
+      const height = canvas.height;
+      const pad = { left: 42, right: 42, top: 18, bottom: 30 };
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = '#fbfcfc';
+      ctx.fillRect(0, 0, width, height);
+      ctx.strokeStyle = '#dce3e6';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.top + (height - pad.top - pad.bottom) * (i / 4);
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(width - pad.right, y);
+        ctx.stroke();
+      }
+      if (matched.length < 2) {
+        ctx.fillStyle = '#68777e';
+        ctx.font = '15px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Waiting for route history', width / 2, height / 2);
+        return;
+      }
+      const times = matched.map(point => point.time);
+      const minTime = Math.min(...times);
+      const maxTime = Math.max(...times);
+      const scores = matched.map(point => point.score);
+      const temps = matched.map(point => point.tempC);
+      const minTemp = Math.floor(Math.min(...temps) - 1);
+      const maxTemp = Math.ceil(Math.max(...temps) + 1);
+
+      function xFor(time) {
+        return pad.left + (width - pad.left - pad.right) * ((time - minTime) / Math.max(maxTime - minTime, 1));
+      }
+      function yFor(value, min, max) {
+        return pad.top + (height - pad.top - pad.bottom) * (1 - (value - min) / Math.max(max - min, 1));
+      }
+      function drawLine(color, values, min, max) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        values.forEach((value, index) => {
+          const x = xFor(matched[index].time);
+          const y = yFor(value, min, max);
+          if (index === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
+      drawLine('#2f7fbf', temps, minTemp, maxTemp);
+      drawLine('#ee7a28', scores, 0, 100);
+
+      ctx.fillStyle = '#68777e';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText(maxTemp + ' C', 8, pad.top + 4);
+      ctx.fillText(minTemp + ' C', 8, height - pad.bottom);
+      ctx.textAlign = 'right';
+      ctx.fillText('100 score', width - 8, pad.top + 4);
+      ctx.fillText('0 score', width - 8, height - pad.bottom);
+    }
+
+    function exportCsv() {
+      if (!matched.length) return;
+      const rows = [
+        ['timestamp', 'latitude', 'longitude', 'temperature_c', 'humidity_rh', 'exposure_score', 'gps_accuracy_m', 'sensor_delta_seconds'],
+        ...matched.map(point => [
+          new Date(point.time).toISOString(),
+          point.lat,
+          point.lon,
+          fmt(point.tempC, 2),
+          fmt(point.humidity, 2),
+          point.score,
+          Number.isFinite(point.accuracy) ? point.accuracy : '',
+          point.sensorDeltaSeconds
+        ])
+      ];
+      const csv = rows.map(row => row.map(value => '"' + String(value).replaceAll('"', '""') + '"').join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'route-exposure.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    document.getElementById('refresh').addEventListener('click', loadData);
+    document.getElementById('export').addEventListener('click', exportCsv);
+    windowMinutesEl.addEventListener('change', loadData);
+    showMetricEl.addEventListener('change', renderMap);
+    loadSettings();
+    if (channelIdEl.value.trim()) loadData();
+    setInterval(() => {
+      if (channelIdEl.value.trim()) loadData();
+    }, 60000);
+  </script>
+</body>
+</html>
