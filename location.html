@@ -1,9 +1,12 @@
+```html
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <title>Phone Location Uploader</title>
+
   <style>
     :root {
       --ink: #142022;
@@ -15,25 +18,40 @@
       --warn: #a15c00;
       --bad: #b3261e;
     }
-    * { box-sizing: border-box; }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       font-family: Arial, Helvetica, sans-serif;
       background: var(--page);
       color: var(--ink);
     }
+
     main {
       width: min(720px, calc(100vw - 28px));
       margin: 0 auto;
       padding: 20px 0;
     }
+
     header {
       border-bottom: 1px solid var(--line);
       padding-bottom: 14px;
       margin-bottom: 14px;
     }
-    h1 { margin: 0; font-size: 1.8rem; letter-spacing: 0; }
-    p { color: var(--muted); line-height: 1.45; }
+
+    h1 {
+      margin: 0;
+      font-size: 1.8rem;
+    }
+
+    p {
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -41,12 +59,14 @@
       padding: 14px;
       margin-bottom: 12px;
     }
+
     label {
       display: block;
       color: var(--muted);
       font-size: 0.85rem;
       margin-bottom: 6px;
     }
+
     input {
       width: 100%;
       border: 1px solid var(--line);
@@ -55,6 +75,7 @@
       font: inherit;
       margin-bottom: 10px;
     }
+
     button {
       border: 0;
       border-radius: 6px;
@@ -66,49 +87,98 @@
       margin-right: 8px;
       margin-bottom: 8px;
     }
+
     button.secondary {
       background: #e6eceb;
       color: var(--ink);
     }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 10px;
     }
+
     .metric {
       border-top: 1px solid var(--line);
       padding-top: 10px;
     }
+
     .metric b {
       display: block;
       font-size: 1.35rem;
       overflow-wrap: anywhere;
     }
-    .ok { color: var(--accent); }
-    .warn { color: var(--warn); }
-    .bad { color: var(--bad); }
+
+    .ok {
+      color: var(--accent);
+    }
+
+    .warn {
+      color: var(--warn);
+    }
+
+    .bad {
+      color: var(--bad);
+    }
+
     @media (max-width: 620px) {
-      .grid { grid-template-columns: 1fr; }
+      .grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
+
 <body>
   <main>
     <header>
       <h1>Phone Location Uploader</h1>
-      <p>Keep this page open while recording. It sends phone GPS coordinates to the same ThingSpeak channel as the ESP32 sensor readings.</p>
+
+      <p>
+        Keep this page open while recording. It sends your phone's GPS
+        coordinates to the same ThingSpeak channel as the ESP32 sensor
+        readings.
+      </p>
     </header>
 
     <section class="panel">
       <label for="writeKey">ThingSpeak Write API Key</label>
-      <input id="writeKey" placeholder="Paste Write API Key">
+
+      <input
+        id="writeKey"
+        type="password"
+        placeholder="Paste Write API Key"
+        autocomplete="off"
+      >
 
       <label for="deviceLabel">Device Label</label>
-      <input id="deviceLabel" value="esp32-aht20-001">
 
-      <button id="start">Start Tracking</button>
-      <button id="stop" class="secondary">Stop Tracking</button>
-      <p id="status" class="warn">Idle. Location permission has not been requested yet.</p>
+      <input
+        id="deviceLabel"
+        value="esp32-aht20-001"
+      >
+
+      <button id="start" type="button">
+        Start Tracking
+      </button>
+
+      <button
+        id="stop"
+        class="secondary"
+        type="button"
+      >
+        Stop Tracking
+      </button>
+
+      <p id="status" class="warn">
+        Idle. Location permission has not been requested yet.
+      </p>
     </section>
 
     <section class="panel grid">
@@ -116,14 +186,17 @@
         <label>Latitude</label>
         <b id="lat">--</b>
       </div>
+
       <div class="metric">
         <label>Longitude</label>
         <b id="lon">--</b>
       </div>
+
       <div class="metric">
         <label>Accuracy</label>
         <b id="accuracy">--</b>
       </div>
+
       <div class="metric">
         <label>Last Upload</label>
         <b id="lastUpload">--</b>
@@ -132,113 +205,305 @@
   </main>
 
   <script>
-    const writeKeyInput = document.getElementById('writeKey');
-    const deviceLabelInput = document.getElementById('deviceLabel');
-    const statusEl = document.getElementById('status');
-    const latEl = document.getElementById('lat');
-    const lonEl = document.getElementById('lon');
-    const accuracyEl = document.getElementById('accuracy');
-    const lastUploadEl = document.getElementById('lastUpload');
+    const writeKeyInput =
+      document.getElementById("writeKey");
 
-    const UPLOAD_INTERVAL_MS = 75000;
+    const deviceLabelInput =
+      document.getElementById("deviceLabel");
+
+    const statusEl =
+      document.getElementById("status");
+
+    const latEl =
+      document.getElementById("lat");
+
+    const lonEl =
+      document.getElementById("lon");
+
+    const accuracyEl =
+      document.getElementById("accuracy");
+
+    const lastUploadEl =
+      document.getElementById("lastUpload");
+
+    const startButton =
+      document.getElementById("start");
+
+    const stopButton =
+      document.getElementById("stop");
+
+    // Upload the latest phone location every 30 seconds.
+    const UPLOAD_INTERVAL_MS = 30000;
+
     let watchId = null;
     let uploadTimer = null;
     let latestPosition = null;
+    let isUploading = false;
+    let firstUploadSent = false;
 
-    function setStatus(text, className) {
+    function setStatus(text, className = "") {
       statusEl.textContent = text;
-      statusEl.className = className || '';
+      statusEl.className = className;
     }
 
     function saveSettings() {
-      localStorage.setItem('thingspeakWriteKey', writeKeyInput.value.trim());
-      localStorage.setItem('deviceLabel', deviceLabelInput.value.trim());
+      localStorage.setItem(
+        "thingspeakWriteKey",
+        writeKeyInput.value.trim()
+      );
+
+      localStorage.setItem(
+        "deviceLabel",
+        deviceLabelInput.value.trim()
+      );
     }
 
     function loadSettings() {
-      writeKeyInput.value = localStorage.getItem('thingspeakWriteKey') || '';
-      deviceLabelInput.value = localStorage.getItem('deviceLabel') || 'esp32-aht20-001';
+      writeKeyInput.value =
+        localStorage.getItem("thingspeakWriteKey") || "";
+
+      deviceLabelInput.value =
+        localStorage.getItem("deviceLabel") ||
+        "esp32-aht20-001";
     }
 
     function updatePositionUi(position) {
       const coords = position.coords;
-      latEl.textContent = coords.latitude.toFixed(6);
-      lonEl.textContent = coords.longitude.toFixed(6);
-      accuracyEl.textContent = Math.round(coords.accuracy) + ' m';
+
+      latEl.textContent =
+        coords.latitude.toFixed(6);
+
+      lonEl.textContent =
+        coords.longitude.toFixed(6);
+
+      accuracyEl.textContent =
+        Math.round(coords.accuracy) + " m";
     }
 
     async function sendLocation() {
+      if (isUploading) {
+        return;
+      }
+
       saveSettings();
-      const writeKey = writeKeyInput.value.trim();
-      const deviceLabel = deviceLabelInput.value.trim() || 'esp32-aht20-001';
+
+      const writeKey =
+        writeKeyInput.value.trim();
+
+      const deviceLabel =
+        deviceLabelInput.value.trim() ||
+        "esp32-aht20-001";
+
       if (!writeKey) {
-        setStatus('Paste your ThingSpeak Write API Key first.', 'bad');
+        setStatus(
+          "Paste your ThingSpeak Write API Key first.",
+          "bad"
+        );
+
         return;
       }
+
       if (!latestPosition) {
-        setStatus('Waiting for the first GPS fix.', 'warn');
+        setStatus(
+          "Waiting for the first GPS fix.",
+          "warn"
+        );
+
         return;
       }
 
-      const coords = latestPosition.coords;
-      const params = new URLSearchParams({
-        api_key: writeKey,
-        field3: String(Math.round(coords.accuracy)),
-        lat: coords.latitude.toFixed(6),
-        long: coords.longitude.toFixed(6),
-        status: deviceLabel + ' phone-location'
-      });
+      isUploading = true;
 
-      const url = 'https://api.thingspeak.com/update?' + params.toString();
+      const coords =
+        latestPosition.coords;
+
+      const params =
+        new URLSearchParams({
+          api_key: writeKey,
+          field3: String(
+            Math.round(coords.accuracy)
+          ),
+          lat: coords.latitude.toFixed(6),
+          long: coords.longitude.toFixed(6),
+          status:
+            deviceLabel + " phone-location"
+        });
+
+      const url =
+        "https://api.thingspeak.com/update?" +
+        params.toString();
+
       try {
-        await fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store' });
-        lastUploadEl.textContent = new Date().toLocaleTimeString();
-        setStatus('Location upload sent. Tracking continues until you stop it.', 'ok');
+        /*
+          no-cors prevents the browser from reading the
+          ThingSpeak response, but the request is still sent.
+        */
+        await fetch(url, {
+          method: "GET",
+          mode: "no-cors",
+          cache: "no-store"
+        });
+
+        lastUploadEl.textContent =
+          new Date().toLocaleTimeString();
+
+        setStatus(
+          "Location sent. Next upload in about 30 seconds.",
+          "ok"
+        );
       } catch (error) {
-        setStatus('Could not send location. Check internet and try again.', 'bad');
+        console.error(
+          "Location upload failed:",
+          error
+        );
+
+        setStatus(
+          "Could not send location. Check your internet connection.",
+          "bad"
+        );
+      } finally {
+        isUploading = false;
       }
+    }
+
+    function handlePosition(position) {
+      latestPosition = position;
+
+      updatePositionUi(position);
+
+      setStatus(
+        "Tracking location. Keep this page open and the screen awake.",
+        "ok"
+      );
+
+      /*
+        Send the first upload immediately after the first
+        successful GPS position is received.
+      */
+      if (!firstUploadSent) {
+        firstUploadSent = true;
+        sendLocation();
+      }
+    }
+
+    function handleLocationError(error) {
+      let message =
+        "Could not access location.";
+
+      if (error.code === 1) {
+        message =
+          "Location permission was denied. Allow location access and try again.";
+      } else if (error.code === 2) {
+        message =
+          "Your phone could not determine its location.";
+      } else if (error.code === 3) {
+        message =
+          "Location request timed out. Try moving outdoors.";
+      }
+
+      setStatus(message, "bad");
     }
 
     function startTracking() {
       saveSettings();
+
+      const writeKey =
+        writeKeyInput.value.trim();
+
+      if (!writeKey) {
+        setStatus(
+          "Paste your ThingSpeak Write API Key first.",
+          "bad"
+        );
+
+        return;
+      }
+
       if (!navigator.geolocation) {
-        setStatus('This browser does not support geolocation.', 'bad');
+        setStatus(
+          "This browser does not support geolocation.",
+          "bad"
+        );
+
         return;
       }
 
       stopTracking(false);
 
-      watchId = navigator.geolocation.watchPosition(
-        position => {
-          latestPosition = position;
-          updatePositionUi(position);
-          setStatus('Tracking location. Keep this page open and the screen awake.', 'ok');
-        },
-        error => {
-          setStatus(error.message || 'Location permission failed.', 'bad');
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 5000,
-          timeout: 20000
-        }
+      latestPosition = null;
+      firstUploadSent = false;
+
+      startButton.disabled = true;
+
+      setStatus(
+        "Requesting location permission...",
+        "warn"
       );
 
-      uploadTimer = setInterval(sendLocation, UPLOAD_INTERVAL_MS);
-      setTimeout(sendLocation, 20000);
+      watchId =
+        navigator.geolocation.watchPosition(
+          handlePosition,
+          handleLocationError,
+          {
+            enableHighAccuracy: true,
+            maximumAge: 5000,
+            timeout: 20000
+          }
+        );
+
+      uploadTimer =
+        setInterval(
+          sendLocation,
+          UPLOAD_INTERVAL_MS
+        );
     }
 
-    function stopTracking(showMessage = true) {
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-      if (uploadTimer !== null) clearInterval(uploadTimer);
+    function stopTracking(
+      showMessage = true
+    ) {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(
+          watchId
+        );
+      }
+
+      if (uploadTimer !== null) {
+        clearInterval(uploadTimer);
+      }
+
       watchId = null;
       uploadTimer = null;
-      if (showMessage) setStatus('Stopped.', 'warn');
+      latestPosition = null;
+      firstUploadSent = false;
+      isUploading = false;
+
+      startButton.disabled = false;
+
+      if (showMessage) {
+        setStatus(
+          "Tracking stopped.",
+          "warn"
+        );
+      }
     }
 
-    document.getElementById('start').addEventListener('click', startTracking);
-    document.getElementById('stop').addEventListener('click', () => stopTracking(true));
+    startButton.addEventListener(
+      "click",
+      startTracking
+    );
+
+    stopButton.addEventListener(
+      "click",
+      () => stopTracking(true)
+    );
+
+    window.addEventListener(
+      "beforeunload",
+      () => stopTracking(false)
+    );
+
     loadSettings();
   </script>
 </body>
 </html>
+```
